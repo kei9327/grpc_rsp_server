@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package google.example;
+
+option java_multiple_files = true;
+
+service RspApplication {
+     rpc Login(Gamer) returns (stream Welecom);
+     rpc Game(stream GRequest) returns (stream GResponse);
+     rpc Rank(Gamer) returns (RankList);
+}
+
+message RankList {
+    repeated Ranker ranker = 1;
+}
+
+message Ranker {
+    string name = 1;
+    int32  score = 2;
+    int32  ranking =3;
+}
+
+message Gamer {
+    string name = 1;
+    string ip = 2;
+}
+
+message Welecom {
+    enum Status {
+        WAIT = 0;
+        READY = 1;
+        READY_IS_HOST = 2;
+    }
+
+    enum ClientType {
+        HOST = 0;
+        GUEST = 1;
+    }
+
+    Status status = 1;
+    ClientType ctype = 2;
+}
+
+message GRequest {
+    enum MessageType {
+        SELECT = 0;
+        HOST_GAME_START = 1;
+        TIMEOUT_ACK = 2;
+    }
+
+    enum Select {
+        NONE = 0;
+        ROCK = 1;
+        SCISSOR = 2;
+        PAPER = 3;
+    }
+
+    message Player {
+        string name = 1;
+        string ip = 2;
+    }
+
+    MessageType messageType = 1;
+    Player player = 2;
+    Select select = 3;
+}
+
+message GResponse {
+    enum MessageType {
+        START = 0;
+        TIMEOUT = 1;
+        RESULT = 2;
+        DRAW = 3; // 게임 비겼을시 들어옴
+        LEAVE = 4; // 어플리케이션 상에서 초기로 돌아갈 것
+        CHANGE_HOST = 5;
+    }
+
+    message Player {
+        string name = 1;
+        string ip = 2;
+    }
+
+    enum Timeout {
+        NOT = 0;
+        YES = 1;
+    }
+
+    message Result  {
+        repeated string winner = 1;
+        string point = 2;
+    }
+
+    MessageType messageType = 1;
+    repeated Player player = 2;
+    Timeout timeoutInfo = 3;
+    int32 timeoutCount = 4;
+    Gamer hostPlayer = 5;
+    Result result = 6;
+}
+
