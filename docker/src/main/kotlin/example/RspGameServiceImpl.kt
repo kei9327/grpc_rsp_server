@@ -31,6 +31,16 @@ class RspGameServiceImpl : RspGameService {
             playersList.add(newPlayer)
         }
         if (playersList.size == 1) hostPlayer = newPlayer
+
+        checkUserLog()
+    }
+
+    fun checkUserLog() {
+        println("=========== Players ===========")
+        playersList.forEach {
+            println("${it.name} , ${it.ip} ")
+        }
+        println("=========== Players End ===========")
     }
 
     fun checkSameUser(player: GRequest.Player): Boolean {
@@ -59,10 +69,13 @@ class RspGameServiceImpl : RspGameService {
                     hostPlayer = null
                 }
             }
+            checkUserLog()
         }
     }
 
     override fun startHost(player: GRequest.Player): Boolean {
+        checkUserLog()
+
         return if (player.ip == hostPlayer?.ip &&
             player.name == hostPlayer?.name
         ) {
@@ -93,7 +106,7 @@ class RspGameServiceImpl : RspGameService {
                 callback?.gameTimeout(hostPlayer)
             }
 
-            if (time == 20 + 1) {
+            if (time == 20 + 3) {
                 timerTask?.cancel()
                 processGame()
             }
@@ -155,10 +168,13 @@ class RspGameServiceImpl : RspGameService {
             }
         }
 
+        checkUserLog()
+
         callback?.ready2Play(hostPlayer)
     }
 
     override fun select(player: GRequest.Player, select: GRequest.Select) {
+        timeoutCheckList.remove(player)
         gameBoard[player] = select
     }
 

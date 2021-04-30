@@ -106,7 +106,7 @@ class RspGameServiceImpl : RspGameService {
                 callback?.gameTimeout(hostPlayer)
             }
 
-            if (time == 20 + 1) {
+            if (time == 20 + 3) {
                 timerTask?.cancel()
                 processGame()
             }
@@ -174,6 +174,7 @@ class RspGameServiceImpl : RspGameService {
     }
 
     override fun select(player: GRequest.Player, select: GRequest.Select) {
+        timeoutCheckList.remove(player)
         gameBoard[player] = select
     }
 
