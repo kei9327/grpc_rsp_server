@@ -43,9 +43,10 @@ message Welecom {
 
 message GRequest {
     enum MessageType {
-        SELECT = 0;
-        HOST_GAME_START = 1;
-        TIMEOUT_ACK = 2;
+        NO = 0;
+        SELECT = 1;
+        HOST_GAME_START = 2;
+        TIMEOUT_ACK = 3;
     }
 
     enum Select {

@@ -7,10 +7,17 @@ import io.grpc.ServerBuilder
 import io.grpc.stub.StreamObserver
 import java.io.IOException
 import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
 
-class RspServer(private val port: Int = 8080, val context: Context) {
+class RspServer(private val port: Int = 31249, val context: Context, val listener: RspServerListener) {
     private var server: Server? = null
     private val service: RspGameService = RspGameServiceImpl()
+
+    interface RspServerListener {
+        fun serverInfo(ip:String, status: String)
+        fun serverLog(log:String)
+    }
 
     @Throws(IOException::class)
     fun start() {
@@ -20,58 +27,67 @@ class RspServer(private val port: Int = 8080, val context: Context) {
             .build()
             .start()
 
-        println("Server started on port: $port")
-        println("Server started on IP Address: ${getIPAddress(true)}")
-        println("Server started on Wifi IP Address: ${wifiIpAddress(context)}")
+        log("Server started on port: $port")
+        log("Server started on IP Address: ${getIPAddress(true)}")
+        log("Server started on Wifi IP Address: ${wifiIpAddress(context)}")
+
+        listener.serverInfo("IP : ${getIPAddress(true)}:$port \n ${wifiIpAddress(context)}:$port",
+            "Server Running"
+        )
 
         Runtime.getRuntime().addShutdownHook(object : Thread() {
             override fun run() {
                 // Use stderr here since the logger may have been reset by its JVM shutdown hook.
-                println("Shutting down gRPC server...")
+                log("Shutting down gRPC server...")
                 this@RspServer.stop()
-                println("Server shut down.")
+                log("Server shut down.")
             }
         })
     }
 
-    private fun stop() = server?.shutdown()
+    fun log(log: String) {
+        println(log)
+        listener.serverLog(log)
+    }
+
+    fun stop() = server?.shutdown()
 
     /** Await termination on the main thread since the grpc library uses daemon threads. */
     @Throws(InterruptedException::class)
-    public fun blockUntilShutdown() = server?.awaitTermination()
+    fun blockUntilShutdown() = server?.awaitTermination()
 
     private inner class RspApplicationImpl(val service: RspGameService) :
         RspApplicationGrpc.RspApplicationImplBase() {
         init {
             service.setGameCallback(object : RspGameCallback {
                 override fun gameResult(
-                    player: List<GRequest.Player>,
+                    player: ArrayList<Pair<String, String>>,
                     point: Int,
-                    hostPlayer: GRequest.Player?
+                    hostPlayer: Pair<String, String>?
                 ) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.RESULT).apply {
                             hostPlayer?.let {
                                 setHostPlayer(
-                                    Gamer.newBuilder().setName(hostPlayer.name)
-                                        .setIp(hostPlayer.ip).build()
+                                    Gamer.newBuilder().setName(it.second)
+                                        .setIp(it.first).build()
                                 )
                             }
 
                             player.forEach {
-                                this.setResult(GResponse.Result.newBuilder().addWinner(it.name))
+                                this.setResult(GResponse.Result.newBuilder().addWinner(it.second))
                             }
                         }.build()
                     sendMessage(response)
                 }
 
-                override fun gameTimeout(hostPlayer: GRequest.Player?) {
+                override fun gameTimeout(hostPlayer: Pair<String, String>?) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.TIMEOUT).apply {
                             hostPlayer?.let {
                                 setHostPlayer(
-                                    Gamer.newBuilder().setName(hostPlayer.name)
-                                        .setIp(hostPlayer.ip).build()
+                                    Gamer.newBuilder().setName(hostPlayer.second)
+                                        .setIp(hostPlayer.first).build()
                                 )
                             }
                         }
@@ -80,21 +96,21 @@ class RspServer(private val port: Int = 8080, val context: Context) {
                 }
 
                 override fun startGame(
-                    player: List<GRequest.Player>,
-                    hostPlayer: GRequest.Player?
+                    player: HashMap<String, String>,
+                    hostPlayer: Pair<String, String>?
                 ) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.START)
                             .setTimeoutCount(20).apply {
                                 hostPlayer?.let {
                                     setHostPlayer(
-                                        Gamer.newBuilder().setName(hostPlayer.name)
-                                            .setIp(hostPlayer.ip).build()
+                                        Gamer.newBuilder().setName(it.second)
+                                            .setIp(it.first).build()
                                     )
                                 }
                                 player.forEach {
                                     this.addPlayer(
-                                        GResponse.Player.newBuilder().setIp(it.ip).setName(it.name)
+                                        GResponse.Player.newBuilder().setIp(it.key).setName(it.value)
                                             .build()
                                     )
                                 }
@@ -102,35 +118,35 @@ class RspServer(private val port: Int = 8080, val context: Context) {
                     sendMessage(response)
                 }
 
-                override fun gameDraw(hostPlayer: GRequest.Player?) {
+                override fun gameDraw(hostPlayer: Pair<String, String>?) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.DRAW).apply {
                             hostPlayer?.let {
                                 setHostPlayer(
-                                    Gamer.newBuilder().setName(hostPlayer.name)
-                                        .setIp(hostPlayer.ip).build()
+                                    Gamer.newBuilder().setName(it.second)
+                                        .setIp(it.first).build()
                                 )
                             }
                         }.build()
                     sendMessage(response)
                 }
 
-                override fun leavePlayer(key: GRequest.Player?) {
+                override fun leavePlayer(key: Pair<String, String?>) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.LEAVE).build()
                     sendMessage(response)
                 }
 
-                override fun ready2Play(hostPlayer: GRequest.Player?) {
+                override fun ready2Play(hostPlayer: Pair<String, String>?) {
                     sendReady2Play()
                 }
 
-                override fun changeHost(hostPlayer: GRequest.Player) {
+                override fun changeHost(hostPlayer: Pair<String, String>) {
                     val response: GResponse =
                         GResponse.newBuilder().setMessageType(GResponse.MessageType.CHANGE_HOST)
                             .setHostPlayer(
-                                Gamer.newBuilder().setName(hostPlayer.name)
-                                    .setIp(hostPlayer.ip).build()
+                                Gamer.newBuilder().setName(hostPlayer.second)
+                                    .setIp(hostPlayer.first).build()
                             ).build()
                     sendMessage(response)
                 }
@@ -151,6 +167,7 @@ class RspServer(private val port: Int = 8080, val context: Context) {
         }
 
         fun sendMessage(response: GResponse) {
+            log("send response : $response")
             clients.values.forEach { it1 -> it1.onNext(response) }
         }
 
@@ -163,26 +180,26 @@ class RspServer(private val port: Int = 8080, val context: Context) {
             val id = UUID.randomUUID().toString()
             clients[id] = responseObserver
 
-            println("Client connected with id $id")
+            log("Client connected with id $id")
 
             return streamObserver {
 
                 onNext {
                     clientUser[id] = it.player
                     proxyMessage(it)
-                    println("Received message from $id, sending to ${clients.size} clients")
+                    log("Received message from $id, sending to ${clients.size} clients")
                 }
 
                 onError {
-                    println("Client error : ${it?.message}")
+                    log("Client error : ${it?.message}")
                     service.leftPlayer(clientUser[id])
                     clients.remove(id)
                     clientUser.remove(id)
                 }
 
                 onCompleted {
-                    println("Client shut down.")
-                    println("Client $id disconnected")
+                    log("Client shut down.")
+                    log("Client $id disconnected")
                     service.leftPlayer(clientUser[id])
                     clients.remove(id)
                     clientUser.remove(id)
@@ -192,27 +209,27 @@ class RspServer(private val port: Int = 8080, val context: Context) {
         }
 
         private val loginClients =
-            Collections.synchronizedMap(mutableMapOf<Gamer, StreamObserver<Welecom>>())
+            Collections.synchronizedMap(mutableMapOf<String, StreamObserver<Welecom>>())
 
         override fun login(request: Gamer, responseObserver: StreamObserver<Welecom>) {
             val id = request
-            loginClients[id] = responseObserver
+            loginClients[id.ip] = responseObserver
 
-            println("Client login : ${request.name} (${request.ip})")
+            log("Client login : ${request.name} (${request.ip})")
 
             service.joinPlayer(request)
 
-            val host = service.isHost(request)
+            val host = service.isHost(request.ip)
             val playing = service.isPlaying()
             val response: Welecom = Welecom.newBuilder().setCtype(host)
                 .setStatus(playing).build()
 
-            println("Client login response : $response")
+            log("Client login response : $response")
 
             responseObserver.onNext(response)
 
             if (playing == Welecom.Status.READY) {
-                loginClients.remove(id)
+                loginClients.remove(id.ip)
                 responseObserver.onCompleted()
             }
         }
@@ -223,7 +240,7 @@ class RspServer(private val port: Int = 8080, val context: Context) {
                 service.gameRank().forEach {
                     addRanker(
                         Ranker.newBuilder()
-                            .setName(it.first.name)
+                            .setName(it.first)
                             .setScore(it.second)
                             .setRanking(count++)
                             .build()
@@ -236,7 +253,7 @@ class RspServer(private val port: Int = 8080, val context: Context) {
         }
 
         private fun proxyMessage(response: GRequest) {
-            println("Client Message : $response")
+            log("Client Message : $response")
 
             when (response.messageType) {
                 GRequest.MessageType.HOST_GAME_START -> {

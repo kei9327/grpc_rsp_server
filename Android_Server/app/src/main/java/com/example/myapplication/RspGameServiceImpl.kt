@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.text.TextUtils
 import google.example.GRequest
 import google.example.Gamer
 import google.example.Welecom
@@ -7,16 +8,17 @@ import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.concurrent.timer
+import kotlin.math.log
 
 class RspGameServiceImpl : RspGameService {
 
-    val scoreBoard: HashMap<GRequest.Player, Int> = HashMap()
-    private val playersList: ArrayList<GRequest.Player> = ArrayList()
-    private val timeoutCheckList: ArrayList<GRequest.Player> = ArrayList()
+    val scoreBoard: HashMap<String, Int> = HashMap()
+    private val playersList = HashMap<String, String>()
+    private val timeoutCheckList = HashMap<String, String>()
 
-    var hostPlayer: GRequest.Player? = null
+    var hostPlayer: Pair<String, String>? = null
 
-    val gameBoard: HashMap<GRequest.Player, GRequest.Select> = HashMap()
+    val gameBoard: HashMap<String, GRequest.Select> = HashMap()
 
     var callback: RspGameCallback? = null
 
@@ -25,67 +27,46 @@ class RspGameServiceImpl : RspGameService {
     var isPlaying = false
 
     override fun joinPlayer(gamer: Gamer) {
-        val newPlayer = GRequest.Player.newBuilder().setIp(gamer.ip).setName(gamer.name).build()
 
-        if (!checkSameUser(newPlayer)) {
-            playersList.add(newPlayer)
-        }
-        if (playersList.size == 1) hostPlayer = newPlayer
-
-        checkUserLog()
-    }
-
-    fun checkUserLog() {
-        println("=========== Players ===========")
-        playersList.forEach {
-            println("${it.name} , ${it.ip} ")
-        }
-        println("=========== Players End ===========")
-    }
-
-    fun checkSameUser(player: GRequest.Player): Boolean {
-        var result = false
-        playersList.forEach {
-            if (it.ip == player.ip && it.name == player.name) {
-                result = true
-                return@forEach
-            }
+        if (!playersList.containsKey(gamer.ip)) {
+            playersList[gamer.ip] = gamer.name
         }
 
-        return result
+        if (playersList.size == 1) {
+            hostPlayer = Pair(gamer.ip, gamer.name)
+            println("$hostPlayer is host")
+        }
     }
 
     override fun leftPlayer(player: GRequest.Player?) {
         player?.let {
-            playersList.remove(player)
+            playersList.remove(player.ip)
 
-            if (player.ip == hostPlayer?.ip &&
-                player.name == hostPlayer?.name
+            if (player.ip == hostPlayer?.first &&
+                player.name == hostPlayer?.second
             ) {
                 if (playersList.isNotEmpty()) {
-                    hostPlayer = playersList[0]
-                    callback?.changeHost(playersList[0])
+                    hostPlayer = Pair(it.ip, it.name)
+                    callback?.changeHost(hostPlayer!!)
                 } else {
                     hostPlayer = null
                 }
             }
-            checkUserLog()
         }
     }
 
     override fun startHost(player: GRequest.Player): Boolean {
-        checkUserLog()
-
-        return if (player.ip == hostPlayer?.ip &&
-            player.name == hostPlayer?.name
+        return if (TextUtils.equals(player.ip,hostPlayer?.first) &&
+            TextUtils.equals(player.name, hostPlayer?.second)
         ) {
+            println("startHost")
             gameBoard.clear()
             playersList.forEach {
-                gameBoard[it] = GRequest.Select.NONE
+                gameBoard[it.key] = GRequest.Select.NONE
             }
 
             timeoutCheckList.clear()
-            timeoutCheckList.addAll(playersList)
+            timeoutCheckList.putAll(playersList)
 
             time = 0
             callback?.startGame(playersList, hostPlayer)
@@ -93,6 +74,7 @@ class RspGameServiceImpl : RspGameService {
             startTimer()
             true
         } else {
+            println("startHost : fail ")
             false
         }
     }
@@ -106,7 +88,7 @@ class RspGameServiceImpl : RspGameService {
                 callback?.gameTimeout(hostPlayer)
             }
 
-            if (time == 20 + 3) {
+            if (time == 20 + 5) {
                 timerTask?.cancel()
                 processGame()
             }
@@ -114,19 +96,20 @@ class RspGameServiceImpl : RspGameService {
     }
 
     private fun processGame() {
-        var scissors = ArrayList<GRequest.Player>()
-        var rocks = ArrayList<GRequest.Player>()
-        var paper = ArrayList<GRequest.Player>()
+        var scissors = ArrayList<Pair<String, String>>()
+        var rocks = ArrayList<Pair<String, String>>()
+        var paper = ArrayList<Pair<String, String>>()
 
         gameBoard.entries.forEach { it ->
-            when (it.value) {
+            println("${it.key} : ${it.value}")
+            when (gameBoard[it.key]) {
                 GRequest.Select.NONE -> {
+                    callback?.leavePlayer(Pair(it.key, playersList[it.key]))
                     playersList.remove(it.key)
-                    callback?.leavePlayer(it.key)
                 }
-                GRequest.Select.ROCK -> rocks.add(it.key)
-                GRequest.Select.PAPER -> paper.add(it.key)
-                GRequest.Select.SCISSOR -> scissors.add(it.key)
+                GRequest.Select.ROCK -> rocks.add(Pair(it.key, playersList[it.key]!!))
+                GRequest.Select.PAPER -> paper.add(Pair(it.key, playersList[it.key]!!))
+                GRequest.Select.SCISSOR -> scissors.add(Pair(it.key, playersList[it.key]!!))
             }
         }
 
@@ -141,58 +124,59 @@ class RspGameServiceImpl : RspGameService {
         }
         isPlaying = false
         processRetire()
+        callback?.ready2Play(hostPlayer)
     }
 
-    private fun gameResult(players: ArrayList<GRequest.Player>) {
+    private fun gameResult(players: ArrayList<Pair<String, String>>) {
         hostPlayer = players[0] // 승자 중 앞에 있는 사람이 호스트
         callback?.gameResult(players, 10, hostPlayer)
+        callback?.changeHost(hostPlayer!!)
 
         players.forEach {
-            scoreBoard[it] = scoreBoard.getOrDefault(it, 0) + 10
+            scoreBoard[it.second] = scoreBoard.getOrDefault(it.second, 0) + 10
         }
     }
 
     private fun processRetire() {
         timeoutCheckList.forEach {
-            playersList.remove(it)
+            playersList.remove(it.key)
+            callback?.leavePlayer(Pair(it.key, it.value))
 
-            if (it.ip == hostPlayer?.ip &&
-                it.name == hostPlayer?.name
+            if (it.key == hostPlayer?.first &&
+                it.value == hostPlayer?.second
             ) {
                 if (playersList.isNotEmpty()) {
-                    hostPlayer = playersList[0]
-                    callback?.changeHost(playersList[0])
+                    hostPlayer = Pair(playersList.keys.first(), playersList[playersList.keys.first()]!!)
+                    callback?.changeHost(hostPlayer!!)
                 } else {
                     hostPlayer = null
                 }
             }
         }
 
-        checkUserLog()
-
         callback?.ready2Play(hostPlayer)
     }
 
     override fun select(player: GRequest.Player, select: GRequest.Select) {
-        timeoutCheckList.remove(player)
-        gameBoard[player] = select
+        gameBoard[player.ip] = select
+        println("${player.ip} : $select")
     }
 
     override fun timeoutCheck(player: GRequest.Player) {
-        timeoutCheckList.remove(player)
+        timeoutCheckList.remove(player.ip)
     }
 
     override fun setGameCallback(callback: RspGameCallback) {
         this@RspGameServiceImpl.callback = callback
     }
 
-    override fun gameRank(): List<Pair<GRequest.Player, Int>> {
+    override fun gameRank(): List<Pair<String, Int>> {
 
         return scoreBoard.toList().sortedWith(compareBy {it.second})
     }
 
-    override fun isHost(request: Gamer): Welecom.ClientType =
-        if (hostPlayer?.ip == request.ip && hostPlayer?.name == request.name) Welecom.ClientType.HOST
+    override fun isHost(request: String): Welecom.ClientType =
+        if (hostPlayer?.first == request) Welecom.ClientType.HOST
         else Welecom.ClientType.GUEST
 
     override fun isPlaying(): Welecom.Status =

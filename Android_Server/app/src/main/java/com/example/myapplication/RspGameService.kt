@@ -11,17 +11,17 @@ interface RspGameService {
     fun select(player: GRequest.Player, select: GRequest.Select)
     fun timeoutCheck(player: GRequest.Player)
     fun setGameCallback(callback: RspGameCallback)
-    fun gameRank():List<Pair<GRequest.Player, Int>>// 유저, 점수, 순위
-    fun isHost(request: Gamer): Welecom.ClientType
+    fun gameRank(): List<Pair<String, Int>>// 유저, 점수, 순위
+    fun isHost(request: String): Welecom.ClientType
     fun isPlaying(): Welecom.Status
 }
 
 interface RspGameCallback {
-    fun gameResult(player: List<GRequest.Player>, point: Int = 10, hostPlayer: GRequest.Player?)
-    fun gameTimeout(hostPlayer: GRequest.Player?)
-    fun startGame(player: List<GRequest.Player>, hostPlayer: GRequest.Player?)
-    fun gameDraw(hostPlayer: GRequest.Player?)
-    fun leavePlayer(key: GRequest.Player?)
-    fun ready2Play(hostPlayer: GRequest.Player?)
-    fun changeHost(hostPlayer: GRequest.Player)
+    fun gameResult(player: ArrayList<Pair<String, String>>, point: Int = 10, hostPlayer: Pair<String, String>?)
+    fun gameTimeout(hostPlayer: Pair<String, String>?)
+    fun startGame(player: HashMap<String, String>, hostPlayer: Pair<String, String>?)
+    fun gameDraw(hostPlayer: Pair<String, String>?)
+    fun leavePlayer(key: Pair<String, String?>)
+    fun ready2Play(hostPlayer: Pair<String, String>?)
+    fun changeHost(hostPlayer: Pair<String, String>)
 }
